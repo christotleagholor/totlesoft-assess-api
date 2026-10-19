@@ -14,7 +14,7 @@ RUN npm ci --omit=dev
 COPY . .
 
 # Expose the port your app runs on (matching your .env PORT)
-EXPOSE 5001
+EXPOSE 8080
 
 # Command to run the app
 CMD ["npm", "start"]
