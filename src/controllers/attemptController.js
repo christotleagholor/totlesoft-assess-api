@@ -96,7 +96,7 @@ exports.getPracticeQuestions = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid stage. Please restart.' });
     }
 
-    // ✅ If questions are already generated, return them (don't reshuffle on refresh)
+    // ✅ If questions are already generated, return them (prevents reshuffling on refresh)
     if (attempt.practiceQuestions && attempt.practiceQuestions.length > 0) {
       const sanitized = attempt.practiceQuestions.map(q => ({
         taskId: q._id,
@@ -110,7 +110,8 @@ exports.getPracticeQuestions = async (req, res) => {
 
     const project = await STask.findById(projectId).select('masterTasks').lean();
     
-    const practiceSize = Math.min(10, project.masterTasks.length);
+    // ✅ CHANGED: From 10 to 20
+    const practiceSize = Math.min(20, project.masterTasks.length);
     const shuffled = shuffleArray(project.masterTasks);
     const selected = shuffled.slice(0, practiceSize);
 
@@ -304,6 +305,29 @@ exports.submitTest = async (req, res) => {
       totalQuestions: attempt.testQuestions.length,
       passingScore 
     });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
+
+// 7. RESET PRACTICE
+exports.resetPractice = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const userId = req.user._id;
+
+    const attempt = await Attempt.findOne({ userId, projectId });
+    if (!attempt) return res.status(404).json({ success: false, message: 'Attempt not found' });
+
+    // Wipe practice data
+    attempt.practiceQuestions = [];
+    attempt.practiceAnswers = [];
+    
+    await attempt.save();
+
+    res.status(200).json({ success: true, message: 'Practice reset successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
