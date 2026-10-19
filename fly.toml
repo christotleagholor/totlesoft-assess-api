@@ -1,22 +1,27 @@
-# fly.toml app configuration file
-app = "totlesoft-assess-api" # Change this to your unique app name
-primary_region = "iad" # Choose the region closest to your users (e.g., iad, lhr, sin)
+# fly.toml app configuration file generated for totlesoft-assess-api on 2026-10-19T14:12:22Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'totlesoft-assess-api'
+primary_region = 'ams'
 
 [build]
-  dockerfile = "Dockerfile"
+  dockerfile = 'Dockerfile'
 
 [env]
-  PORT = "5001"
-  NODE_ENV = "production"
+  NODE_ENV = 'production'
+  PORT = '5001'
 
 [http_service]
   internal_port = 5001
   force_https = true
-  auto_stop_machines = "stop"   # Stops the machine when idle to save money
-  auto_start_machines = true    # Starts it back up on incoming requests
-  min_machines_running = 0      # Allows scaling to zero
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
 
 [[vm]]
-  memory = "256mb"
-  cpu_kind = "shared"
+  memory = '256mb'
+  cpu_kind = 'shared'
   cpus = 1
+  memory_mb = 256
