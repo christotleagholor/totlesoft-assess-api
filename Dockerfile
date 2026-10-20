@@ -1,20 +1,26 @@
-# Use an official Node.js runtime as a parent image
-FROM node:20-alpine
+FROM node:18-alpine
 
-# Set the working directory inside the container
+# Set timezone to avoid hangs
+ENV TZ=UTC
+
 WORKDIR /app
 
-# Copy package files first to leverage Docker cache
+# Copy package files
 COPY package*.json ./
 
-# Install dependencies (only production for lean image)
-RUN npm ci --omit=dev
+# Install dependencies with timeout and cleanup
+RUN npm install --production --no-fund --no-audit --loglevel=error || \
+    npm install --production --no-fund --no-audit --loglevel=error --timeout=60000
 
-# Copy the rest of the application code
+# Copy application code
 COPY . .
 
-# Expose the port your app runs on (matching your .env PORT)
+# Expose port
 EXPOSE 8080
 
-# Command to run the app
-CMD ["npm", "start"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:8080/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+
+# Start the application
+CMD ["node", "server.js"]
