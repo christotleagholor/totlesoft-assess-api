@@ -1,5 +1,5 @@
 app = "totlesoft-assess-api"
-primary_region = "fra"
+primary_region = "ams"
 
 [build]
 
