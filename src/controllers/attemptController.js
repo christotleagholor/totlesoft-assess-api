@@ -332,3 +332,102 @@ exports.resetPractice = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+
+// 8. FORWARD DETAILS TO SHOP
+exports.forwardToShop = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const userId = req.user._id;
+
+    // 1. Find the attempt
+    const attempt = await Attempt.findOne({ userId, projectId });
+    if (!attempt) {
+      return res.status(404).json({ success: false, message: 'Attempt not found' });
+    }
+
+    // 2. Prevent duplicate forwarding
+    if (attempt.forwardedAt) {
+      return res.status(400).json({ success: false, message: 'You have already forwarded your details to the shop.' });
+    }
+
+    // 3. Verify they actually passed
+    if (!attempt.passed || attempt.stage !== 'passed') {
+      return res.status(400).json({ success: false, message: 'You must pass the assessment before forwarding.' });
+    }
+
+    // 4. Find the project and update the applicant's status
+    const project = await STask.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ success: false, message: 'Project not found' });
+    }
+
+    const applicant = project.applicants.find(
+      (a) => String(a.applicantId) === String(userId)
+    );
+
+    if (!applicant) {
+      return res.status(404).json({ success: false, message: 'You are not an applicant for this project.' });
+    }
+
+    // ✅ Update the applicant with the test result
+    applicant.testTaken = true;
+    applicant.testPassed = true;
+    applicant.testScore = attempt.score;
+    applicant.testCompletedAt = new Date();
+    applicant.status = 'passed';
+    applicant.testQuestionCount = attempt.testQuestions.length;
+
+    // Save the project
+    await project.save();
+
+    // 5. Mark the attempt as forwarded
+    attempt.forwardedAt = new Date();
+    attempt.stage = 'forwarded';
+    await attempt.save();
+
+    // 6. Send email to shop owner (Optional — if not configured, skip gracefully)
+    try {
+      // Fetch shop owner info from the main site's Shop model
+      const Shop = require('../models/Shop'); // We'll need to create this
+      const shop = await Shop.findById(project.shopId).lean();
+      
+      if (shop && shop.email) {
+        const sendMail = require('../utils/sendMail'); // We'll need to create this
+        await sendMail({
+          email: shop.email,
+          subject: `New Candidate for ${project.name}`,
+          message: `
+Hi ${shop.name || 'Shop Owner'},
+
+A candidate has passed the assessment for your project "${project.name}".
+
+Candidate Details:
+- Name: ${req.user.name || 'N/A'}
+- Email: ${req.user.email}
+- Score: ${attempt.score}%
+- Passed On: ${new Date().toLocaleString()}
+
+Please log in to your Totlesoft dashboard and navigate to the project's applicants to manually add this candidate as a worker.
+
+The candidate has been informed that manual review takes 24-72 hours.
+
+— Totlesoft Assessment Portal
+          `,
+        });
+      }
+    } catch (emailError) {
+      console.error('Email send failed (not critical):', emailError.message);
+      // Do not fail the request if email fails
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Your details have been forwarded to the shop owner. They will review your application within 24-72 hours.',
+    });
+
+  } catch (error) {
+    console.error('Forward error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
