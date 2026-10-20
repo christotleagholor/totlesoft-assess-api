@@ -12,23 +12,4 @@ primary_region = "ams"
   auto_stop_machines = "stop"
   auto_start_machines = true
   min_machines_running = 1
-  processes = ["app"]  # <-- Add this line
-
-[[services]]
-  internal_port = 8080
-  protocol = "tcp"
-  processes = ["app"]  # <-- Add this line
-
-  [[services.ports]]
-    port = 80
-    handlers = ["http"]
-
-  [[services.ports]]
-    port = 443
-    handlers = ["tls", "http"]
-
-  [[services.tcp_checks]]
-    grace_period = "30s"
-    interval = "15s"
-    restart_limit = 6
-    timeout = "5s"
+  processes = ["app"]
