@@ -184,15 +184,16 @@ exports.readyForTest = async (req, res) => {
     if (previousAttempt) {
       const hoursSinceFail = (Date.now() - new Date(previousAttempt.testCompletedAt).getTime()) / (1000 * 60 * 60);
       const project = await STask.findById(projectId);
-      const cooldown = project.testConfig?.retryCooldown || 168; // 7 days default
+      const cooldown = project.testConfig?.retryCooldown || 2160; // 7 days default
       
       if (hoursSinceFail < cooldown) {
-        const remaining = Math.ceil(cooldown - hoursSinceFail);
-        return res.status(400).json({ 
-          success: false, 
-          message: `You must wait ${remaining} hours before retaking this test.` 
-        });
-      }
+  const remainingHours = Math.ceil(cooldown - hoursSinceFail);
+  const remainingDays = Math.ceil(remainingHours / 24);
+  return res.status(400).json({
+    success: false,
+    message: `You must wait ${remainingDays} more days before retaking this test.`,
+  });
+}
     }
 
     attempt.stage = 'test';
@@ -348,7 +349,7 @@ exports.forwardToShop = async (req, res) => {
 
     // 2. Prevent duplicate forwarding
     if (attempt.forwardedAt) {
-      return res.status(400).json({ success: false, message: 'You have already forwarded your details to the shop.' });
+      return res.status(400).json({ success: false, message: 'You have already forwarded your details.' });
     }
 
     // 3. Verify they actually passed
@@ -370,15 +371,13 @@ exports.forwardToShop = async (req, res) => {
       return res.status(404).json({ success: false, message: 'You are not an applicant for this project.' });
     }
 
-    // ✅ Update the applicant with the test result
+    // ✅ Update the applicant (Removed testQuestionCount as it's not in schema)
     applicant.testTaken = true;
     applicant.testPassed = true;
     applicant.testScore = attempt.score;
     applicant.testCompletedAt = new Date();
     applicant.status = 'passed';
-    applicant.testQuestionCount = attempt.testQuestions.length;
 
-    // Save the project
     await project.save();
 
     // 5. Mark the attempt as forwarded
@@ -386,18 +385,19 @@ exports.forwardToShop = async (req, res) => {
     attempt.stage = 'forwarded';
     await attempt.save();
 
-    // 6. Send email to shop owner (Optional — if not configured, skip gracefully)
-    try {
-      // Fetch shop owner info from the main site's Shop model
-      const Shop = require('../models/Shop'); // We'll need to create this
-      const shop = await Shop.findById(project.shopId).lean();
-      
-      if (shop && shop.email) {
-        const sendMail = require('../utils/sendMail'); // We'll need to create this
-        await sendMail({
-          email: shop.email,
-          subject: `New Candidate for ${project.name}`,
-          message: `
+    // 6. Send email to shop owner (NON-BLOCKING - Fire and Forget)
+    if (project.shopId) {
+      Promise.resolve().then(async () => {
+        try {
+          const Shop = require('../models/Shop');
+          const shop = await Shop.findById(project.shopId).lean();
+          
+          if (shop && shop.email) {
+            const sendMail = require('../utils/sendMail');
+            await sendMail({
+              email: shop.email,
+              subject: `New Candidate for ${project.name}`,
+              message: `
 Hi ${shop.name || 'Shop Owner'},
 
 A candidate has passed the assessment for your project "${project.name}".
@@ -410,15 +410,14 @@ Candidate Details:
 
 Please log in to your Totlesoft dashboard and navigate to the project's applicants to manually add this candidate as a worker.
 
-The candidate has been informed that manual review takes 24-72 hours.
-
 — Totlesoft Assessment Portal
-          `,
-        });
-      }
-    } catch (emailError) {
-      console.error('Email send failed (not critical):', emailError.message);
-      // Do not fail the request if email fails
+              `,
+            });
+          }
+        } catch (emailError) {
+          console.error('Email send failed (not critical):', emailError.message);
+        }
+      });
     }
 
     return res.status(200).json({
