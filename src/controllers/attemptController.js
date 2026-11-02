@@ -25,37 +25,51 @@ exports.startAssessment = async (req, res) => {
     const project = await STask.findById(projectId).select('testConfig').lean();
     if (!project) return res.status(404).json({ success: false, message: 'Project not found' });
 
-    // Find existing attempt
     let attempt = await Attempt.findOne({ userId, projectId });
 
     if (attempt) {
-      // If they already passed or forwarded, don't let them start again
+      // ✅ NEW LOGIC: If they already passed, silently sync the data to the main site
+      // in case the previous "Forward" request timed out.
       if (['passed', 'forwarded'].includes(attempt.stage)) {
+        try {
+          const fullProject = await STask.findById(projectId);
+          const applicant = fullProject.applicants.find(a => String(a.applicantId) === String(userId));
+          
+          if (applicant && !applicant.testPassed) {
+            applicant.testTaken = true;
+            applicant.testPassed = true;
+            applicant.testScore = attempt.score;
+            applicant.testCompletedAt = attempt.testCompletedAt || new Date();
+            applicant.status = 'passed';
+            await fullProject.save({ validateModifiedOnly: true });
+            console.log(`✅ Auto-synced passed attempt for user ${userId}`);
+          }
+        } catch (syncError) {
+          console.error("Auto-sync failed:", syncError);
+        }
+
         return res.status(400).json({ 
           success: false, 
-          message: 'You have already completed this assessment.' 
+          message: 'You have already passed this assessment. Please check your main Totlesoft dashboard. The shop owner has been notified.' 
         });
       }
       
-      // If they are on practice, resume it
       if (attempt.stage === 'practice') {
         return res.status(200).json({ success: true, attempt });
       }
 
-      // If they failed, check if cooldown is over
       if (attempt.stage === 'failed') {
-        const cooldownHours = project.testConfig?.retryCooldown || 168; // 7 days
+        const cooldownHours = project.testConfig?.retryCooldown || 2160;
         const hoursSinceFail = (Date.now() - new Date(attempt.testCompletedAt).getTime()) / (1000 * 60 * 60);
         
         if (hoursSinceFail < cooldownHours) {
-          const remaining = Math.ceil(cooldownHours - hoursSinceFail);
+          const remainingDays = Math.ceil((cooldownHours - hoursSinceFail) / 24);
           return res.status(400).json({ 
             success: false, 
-            message: `You must wait ${remaining} more hours before retaking this test.` 
+            message: `You must wait ${remainingDays} more days before retaking this test.` 
           });
         }
         
-        // Cooldown passed: Reset the attempt for a new try
         attempt.stage = 'practice';
         attempt.practiceQuestions = [];
         attempt.practiceAnswers = [];
@@ -71,7 +85,6 @@ exports.startAssessment = async (req, res) => {
       }
     }
 
-    // If no attempt exists at all, create a new one
     attempt = await Attempt.create({
       userId,
       projectId,
