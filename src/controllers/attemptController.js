@@ -98,7 +98,6 @@ exports.startAssessment = async (req, res) => {
   }
 };
 
-
 // 2. GET PRACTICE QUESTIONS
 exports.getPracticeQuestions = async (req, res) => {
   try {
@@ -117,16 +116,13 @@ exports.getPracticeQuestions = async (req, res) => {
         question: q.question || "Rate the content",
         content: q.content || "",
         options: q.options || [],
-        type: q.type,
-        // ⬇ NEW
-        sourceUrl: q.sourceUrl || null,
-        contentTitle: q.contentTitle || null,
+        type: q.type
       }));
       return res.status(200).json({ success: true, questions: sanitized });
     }
 
     const project = await STask.findById(projectId).select('masterTasks').lean();
-
+    
     // ✅ CHANGED: From 10 to 20
     const practiceSize = Math.min(20, project.masterTasks.length);
     const shuffled = shuffleArray(project.masterTasks);
@@ -140,10 +136,7 @@ exports.getPracticeQuestions = async (req, res) => {
       question: q.question || "Rate the content",
       content: q.content || "",
       options: q.options || [],
-      type: q.type,
-      // ⬇ NEW
-      sourceUrl: q.sourceUrl || null,
-      contentTitle: q.contentTitle || null,
+      type: q.type
     }));
 
     res.status(200).json({ success: true, questions: sanitized });
@@ -225,7 +218,6 @@ exports.readyForTest = async (req, res) => {
   }
 };
 
-
 // 5. GET TEST QUESTIONS
 exports.getTestQuestions = async (req, res) => {
   try {
@@ -236,7 +228,7 @@ exports.getTestQuestions = async (req, res) => {
     if (!attempt) return res.status(400).json({ success: false, message: 'Invalid stage' });
 
     const project = await STask.findById(projectId).select('masterTasks testConfig').lean();
-
+    
     // Get config
     const testSize = project.testConfig?.testSize || 20;
     const timeLimit = project.testConfig?.timeLimit || 600;
@@ -257,15 +249,12 @@ exports.getTestQuestions = async (req, res) => {
       question: q.question || "Rate the content",
       content: q.content || "",
       options: q.options || [],
-      type: q.type,
-      // ⬇ NEW
-      sourceUrl: q.sourceUrl || null,
-      contentTitle: q.contentTitle || null,
+      type: q.type
     }));
 
-    res.status(200).json({
-      success: true,
-      questions: sanitized,
+    res.status(200).json({ 
+      success: true, 
+      questions: sanitized, 
       timeLimit,
       expiresAt: attempt.testExpiresAt
     });
